@@ -1,0 +1,237 @@
+#!/usr/bin/env node
+const fs = require('fs');
+const spawn = require('child_process').spawn;
+const clean_reg = /\n.*/;
+const reset_color = "\u001b[0m";
+const black_color = "\u001b[30;40m";
+const white_color = "\u001b[47;39m";
+const red_color = "\u001b[41;31m";
+const bold_colored = "\u001b[36m\u001b[1m"
+const set_cursor = (amount, direction) => "\033[" + amount + direction;
+
+const logo = [
+    "                    " + black_color + "./osssso+:." + reset_color,
+    "                " + black_color + "`+ydm" + red_color + "dddddhhhh" + black_color + "dds/`" + reset_color,
+    "               " + black_color + ":m" + red_color + "dddddddmddddddhhh" + black_color + "hs:`" + reset_color,
+    "              " + black_color + ".m" + red_color + "mmdmmmmmddddddddddhhh" + black_color + "ho-" + reset_color,
+    "             " + black_color + "`m" + red_color + "mNmmmmmmdddddddddd" + black_color + "dhs++sdh/:" + reset_color,
+    "            " + black_color + ".d" + red_color + "mNmNNNmmmmmdd" + black_color + "dossso`" + white_color + "         " + black_color + ".y" + reset_color,
+    "           " + black_color + "+d" + red_color + "mmmmMNmmmmm" + black_color + "mmh+" + white_color + "          ``  ```" + black_color + ":/`" + reset_color,
+    "    " + black_color + "`///oohm" + red_color + "mmmmmNmm" + black_color + "mmNo/." + white_color + "     ```....---:-.``" + black_color + "/o" + reset_color,
+    "  " + black_color + ".s+" + white_color + "-    " + black_color + "`-+m" + red_color + "ssNNm" + black_color + "Ns." + white_color + "     ```.:+" + black_color + "h:----..+y:.`//" + reset_color,
+    black_color + "`oh" + white_color + "-`        " + black_color + ".h" + red_color + "m" + black_color + "hNm" + black_color + "y." + white_color + "    ```" + black_color + "./o//:" + reset_color,
+    black_color + "`o" + white_color + "/.```     `" + black_color + "s+-." + white_color + "     ``.-o" + black_color + "o:" + reset_color,
+    " " + black_color + "sy" + white_color + "/..`.` ``-" + black_color + "h.`" + white_color + "      `.-:" + black_color + "+`" + reset_color,
+    "  " + black_color + "/h+" + white_color + "-:--../" + black_color + "ym:." + white_color + "``..." + black_color + "-+o+:`" + reset_color,
+    "    " + black_color + ":hosh/:`o/" + white_color + "---:" + black_color + "oo-." + reset_color,
+    "            " + black_color + "-++s/:`" + reset_color
+];
+
+const logo_size = Math.max(...logo.map(line => {
+    const logo_clean_regex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
+    const cleaned_line = line.replace(logo_clean_regex, "");
+    return cleaned_line.length;
+}));
+
+const reduce_to_string = (prev_match, curr_match) => {
+    if (typeof prev_match === "string") {
+        return prev_match += ' ' + curr_match[1];
+    } else {
+        return prev_match[1] += ' ' + curr_match[1];
+    }
+};
+
+const get_term = {
+    title: bold_colored + "Terminal: " + reset_color,
+    info: process.env.TERM_PROGRAM
+};
+
+const get_title = fs.promises.readFile('/etc/hostname', 'utf-8').then(data => {
+    const cleaned = data.replace(clean_reg, "");
+    return {
+        title: "",
+        info: bold_colored + process.env.USER + reset_color + "@" + bold_colored + cleaned + reset_color
+    };
+});
+
+const get_divider = fs.promises.readFile('/etc/hostname', 'utf-8').then(data => {
+    const cleaned = data.replace(clean_reg, "");
+    return {
+        title: "",
+        info: new Array(cleaned.length + process.env.USER.length + 1).fill('-').reduce((p, c) => p + c)
+    };
+});
+
+const get_kernel = fs.promises.readFile('/proc/version', 'utf8').then(data => {
+    const split_data = data.split(" ");
+    return {
+        title: bold_colored + "Kernel: " + reset_color,
+        info: split_data[2]
+    };
+});
+
+const get_os = fs.promises.readFile('/etc/os-release', 'utf-8').then(data => {
+    const get_name = /NAME=\".*\"/;
+    const cleanup_match = /(^NAME=|\")/g;
+    const match = data?.match(get_name);
+    const trim_match = match[0]?.replaceAll(cleanup_match, "");
+    return {
+        title: bold_colored + "OS: " + reset_color,
+        info: trim_match
+    };
+});
+
+const get_memory = fs.promises.readFile('/proc/meminfo', 'utf-8').then(data => {
+    const find_mem_reg = /^(.*):\s*(\d*).*$/gm;
+    const matches = [...data?.matchAll(find_mem_reg)];
+    let total, shared, memfree, buffers, cached, reclaimable;
+    matches.every(match => {
+        if (total && shared && memfree && buffers && cached && reclaimable)
+            return false;
+
+        switch (match[1]) {
+            case "MemTotal":
+                total = Number(match[2]);
+                break;
+            case "Shmem":
+                shared = Number(match[2]);
+                break;
+            case "MemFree":
+                memfree = Number(match[2]);
+                break;
+            case "Buffers":
+                buffers = Number(match[2]);
+                break;
+            case "Cached":
+                cached = Number(match[2]);
+                break;
+            case "SReclaimable":
+                reclaimable = Number(match[2]);
+                break;
+            default:
+                break;
+        }
+        return true;
+    });
+    const used_memory = (total + shared - memfree - buffers - cached - reclaimable) / 1024;
+    const total_memory = total / 1024;
+    const procentage = (100 * (used_memory / total_memory));
+    return {
+        title: bold_colored + "Memory: " + reset_color,
+        info: `${Math.round(used_memory)}/${Math.round(total_memory)} (${Math.round(procentage)}%)`
+    };
+});
+
+const get_cpu = () => {
+    const cpu_info = fs.promises.readFile('/proc/cpuinfo', 'utf-8').then(data => {
+        const get_model_name = /^model name\s*:.*$/gm;
+        const cleanup_match = /(^model name\s*:\s*|\s@.*$|\(TM\)|\(R\))/g
+        const model_matches = data.match(get_model_name);
+        const cleaned_model = model_matches[0].replaceAll(cleanup_match, "");
+        return {
+            model: cleaned_model,
+            cores: model_matches.length
+        };
+    });
+
+    const cpu_max_freq = fs.promises.readFile('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq', 'utf-8').then(data => {
+        return data / 1000000.0;
+    });
+
+    return Promise.all([cpu_info, cpu_max_freq]).then(([cpu, freq]) => {
+        return {
+            title: bold_colored + "CPU: " + reset_color,
+            info: cpu.model + "(" + cpu.cores + ")" + " @ " + freq + "GHz"
+        }
+    })
+}
+
+const get_model = fs.promises.readFile('/sys/devices/virtual/dmi/id/product_name', 'utf-8').then(data => {
+    return {
+        title: bold_colored + "Host: " + reset_color,
+        info: data.replace(clean_reg, "")
+    };
+});
+
+const get_gpu = new Promise((resolve, reject) => {
+    const find_gpu = spawn('/usr/bin/env', ['lspci']);
+    find_gpu.stdout.on('data', data => {
+        const gpu_regex = /VGA compatible controller:.*/gm;
+        const matches_clean_regex = /(.*\[|\].*)/gm
+        const matches = data?.toString().match(gpu_regex);
+        const cleaned = matches?.map(match => match.replace(matches_clean_regex, ""));
+        const reduced = cleaned?.reduce(reduce_to_string);
+        resolve({
+            title: bold_colored + "GPU: " + reset_color,
+            info: reduced
+        });
+    });
+});
+
+const get_wm = new Promise((resolve, reject) => {
+    const find_id = spawn('/usr/bin/xprop', ["-root", "-notype", "_NET_SUPPORTING_WM_CHECK"]);
+    find_id.stdout.on('data', id_data => {
+        const find_id_regex = /.x.*$/gm;
+        const id_match = id_data?.toString().match(find_id_regex);
+        const find_wm = spawn('/usr/bin/xprop', ['-id', `${id_match[0]}`, '-notype', '-len', '100', '-f', '_NET_WM_NAME', '8t']);
+        find_wm.stdout.on('data', wm_data => {
+            const find_wm_regex = /_NET_WM_NAME = \"(.*)\"/gm;
+            const wm_match = [...wm_data?.toString().matchAll(find_wm_regex)];
+            resolve({
+                title: bold_colored + "WM: " + reset_color,
+                info: wm_match[0][1]
+            });
+        });
+    });
+});
+
+const get_resolution = new Promise((resolve, reject) => {
+    const find_resolution = spawn('xrandr', ['--nograb', '--current']);
+    find_resolution.stdout.on('data', data => {
+        const find_resolution_regex = /connected.*\s(\d+x\d+)/gm;
+        const matches = [...data?.toString().matchAll(find_resolution_regex)];
+        const format_matches = matches?.reduce(reduce_to_string);
+        resolve({
+            title: bold_colored + "Resolution: " + reset_color,
+            info: format_matches
+        });
+    });
+});
+
+const get_uptime = fs.promises.readFile('/proc/uptime', 'utf-8').then(data => {
+    const find_update_reg = /^\d*/;
+    const match = data?.match(find_update_reg);
+    const uptime = new Date(match[0] * 1000).toISOString().substring(11, 19);
+    return {
+        title: bold_colored + "Uptime:" + reset_color,
+        info: uptime
+    }
+});
+
+const get_colors1 = {
+    title: "",
+    info: new Array(8).fill().map((x, i) => "\u001b[48;5;" + i + "m").reduce((p, c) => p + '   ' + c) + reset_color
+}
+
+const get_colors2 = {
+    title: "",
+    info: new Array(8).fill().map((x, i) => "\u001b[48;5;" + (i + 8) + "m").reduce((p, c) => p + '   ' + c) + reset_color
+}
+
+const main = () => {
+    Promise.all([get_title, get_divider, get_os, get_model, get_kernel, get_uptime, get_cpu(), get_gpu, get_memory, get_term, get_wm, get_resolution, get_colors1, get_colors2])
+        .then(result => {
+            result.forEach((info, i, array) => {
+                if (array.length - 1 === i) {
+                    process.stdout.write(set_cursor(logo_size+1, "C") + info.title + info.info);
+                } else {
+                    process.stdout.write(set_cursor(logo_size+1, "C") + info.title + info.info + "\n");
+                }
+            });
+            process.stdout.write(set_cursor(result.length-1, "A") + "\r");
+            logo.forEach(line => {
+                process.stdout.write(line + "\n");
+            });
+        });
+};
+main();
