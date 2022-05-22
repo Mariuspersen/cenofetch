@@ -1,5 +1,5 @@
 # cenofetch
-A simple rewrite of neofetch in javascript, name inspired by [paleofetch](https://github.com/ss7m/paleofetch)
+A simple rewrite of neofetch in javascript, name inspired by [paleofetch](https://github.com/ss7m/paleofetch).<br />
 ceno as in cenozoic because javascript is the future and the future is now, old man.<br />
 ![future](https://c.tenor.com/pljAqxYDG0cAAAAC/future-squidward.gif)
 
