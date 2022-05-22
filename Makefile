@@ -3,7 +3,7 @@ make:
 
 install:
 	mkdir -p /bin
-	cp -f jrep /bin
+	cp -f cenofetch /bin
 	chmod 755 /bin/cenofetch
 
 uninstall:

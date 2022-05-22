@@ -203,7 +203,7 @@ const get_uptime = fs.promises.readFile('/proc/uptime', 'utf-8').then(data => {
     const match = data?.match(find_update_reg);
     const uptime = new Date(match[0] * 1000).toISOString().substring(11, 19);
     return {
-        title: bold_colored + "Uptime:" + reset_color,
+        title: bold_colored + "Uptime: " + reset_color,
         info: uptime
     }
 });
